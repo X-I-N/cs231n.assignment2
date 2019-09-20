@@ -78,7 +78,6 @@ def sgd_momentum(w, dw, config=None):
     return next_w, config
 
 
-
 def rmsprop(w, dw, config=None):
     """
     Uses the RMSProp update rule, which uses a moving average of squared

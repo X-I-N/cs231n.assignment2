@@ -65,7 +65,6 @@ class ThreeLayerConvNet(object):
         for k, v in self.params.items():
             self.params[k] = v.astype(dtype)
 
-
     def loss(self, X, y=None):
         """
         Evaluate loss and gradient for the three-layer convolutional network.
