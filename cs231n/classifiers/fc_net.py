@@ -203,10 +203,14 @@ class FullyConnectedNet(object):
         # parameters should be initialized to zeros.                               #
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-        self.params['W1'] = weight_scale * np.random.randn(input_dim, hidden_dims)
-        self.params['b1'] = np.zeros(hidden_dims)
-        self.params['W2'] = weight_scale * np.random.randn(hidden_dims, num_classes)
-        self.params['b2'] = np.zeros(num_classes)
+        # print(1)
+        self.params['W1'] = weight_scale * np.random.randn(input_dim, hidden_dims[0])
+        self.params['b1'] = np.zeros(hidden_dims[0])
+        for i in range(self.num_layers - 2):
+            self.params['W' + str(i + 2)] = weight_scale * np.random.randn(hidden_dims[i], hidden_dims[i + 1])
+            self.params['b' + str(i + 2)] = np.zeros(hidden_dims[i + 1])
+        self.params['W' + str(self.num_layers)] = weight_scale * np.random.randn(hidden_dims[-1], num_classes)
+        self.params['b' + str(self.num_layers)] = np.zeros(num_classes)
         pass
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -268,7 +272,17 @@ class FullyConnectedNet(object):
         # layer, etc.                                                              #
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+        hidden_layers, caches = list(range(self.num_layers + 1)), list(range(self.num_layers))
+        dp_caches = range(self.num_layers - 1)
+        hidden_layers[0] = X
+        for i in range(self.num_layers):
+            W, b = self.params['W' + str(i + 1)], self.params['b' + str(i + 1)]
+            if i == self.num_layers - 1:
+                hidden_layers[i + 1], caches[i] = affine_forward(hidden_layers[i], W, b)
+            else:
+                hidden_layers[i + 1], caches[i] = affine_relu_forward(hidden_layers[i], W, b)
 
+        scores = hidden_layers[self.num_layers]
         pass
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -295,8 +309,17 @@ class FullyConnectedNet(object):
         # of 0.5 to simplify the expression for the gradient.                      #
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
-        pass
+        loss, dscores = softmax_loss(scores, y)
+        dhiddens = list(range(self.num_layers + 1))
+        dhiddens[self.num_layers] = dscores
+        for i in range(self.num_layers, 0, -1):
+            if i == self.num_layers:
+                dhiddens[i - 1], grads['W' + str(i)], grads['b' + str(i)] = affine_backward(dhiddens[i], caches[i - 1])
+            else:
+                dx, dw, db = affine_relu_backward(dhiddens[i], caches[i - 1])
+                dhiddens[i - 1], grads['W' + str(i)], grads['b' + str(i)] = dx, dw, db
+            loss += 0.5 * self.reg * np.sum(self.params['W' + str(i)] ** 2)
+            grads['W' + str(i)] += self.reg * self.params['W' + str(i)]
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
