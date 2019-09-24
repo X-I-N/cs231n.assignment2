@@ -202,6 +202,7 @@ def batchnorm_forward(x, gamma, beta, bn_param):
         sample_var = np.var(x, axis=0)
         x_hat = (x - sample_mean) / np.sqrt(sample_var + eps)
         out = gamma * x_hat + beta
+        cache = (x, gamma, beta, x_hat, sample_mean, sample_var, eps)
 
         running_mean = momentum * running_mean + (1 - momentum) * sample_mean
         running_var = momentum * running_var + (1 - momentum) * sample_var
@@ -261,7 +262,24 @@ def batchnorm_backward(dout, cache):
     # might prove to be helpful.                                              #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    x, gamma, beta, x_hat, sample_mean, sample_var, eps = cache
+    N = x.shape[0]
 
+    dbeta = np.sum(dout, axis=0)
+    dgamma = np.sum(dout * x_hat, axis=0)
+
+    # we will assume that (a = x - x_mean) and (b = (var + eps) ** 1/2)
+    a, b = x - sample_mean, (sample_var + eps) ** 0.5
+    dx_hat = dout * gamma
+    da = (1 / b) * dx_hat
+    db = np.sum(-a * dx_hat, axis=0) * (b ** -2)
+    db_2 = 0.5 * (1 / b) * db  # db² == dvar
+    dx_var = 2 * a * (1 / N) * db_2
+
+    dmean = np.sum(-da, axis=0) + np.sum((-2 / N) * a, axis=0) * db_2
+    dx_mean = dmean * (1 / N)
+
+    dx = da + dx_mean + dx_var
     pass
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -296,7 +314,16 @@ def batchnorm_backward_alt(dout, cache):
     # single statement; our implementation fits on a single 80-character line.#
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    x, gamma, beta, x_hat, sample_mean, sample_var, eps = cache
+    N = x.shape[0]
+    dbeta = np.sum(dout, axis=0)
+    dgamma = np.sum(dout * x_hat, axis=0)
 
+    dxhat = dout * gamma  # (N, D)
+    dvar = (dxhat * (x - sample_mean) * (-0.5) * np.power(sample_var + eps, -1.5)).sum(axis=0)  # (D,)
+    dmean = np.sum(dxhat * (-1) * np.power(sample_var + eps, -0.5), axis=0)
+    dmean += dvar * np.sum(-2 * (x - sample_mean), axis=0) / N
+    dx = dxhat * np.power(sample_var + eps, -0.5) + dvar * 2 * (x - sample_mean) / N + dmean / N
     pass
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
