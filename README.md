@@ -16,4 +16,5 @@
 
 - [作业要求](http://cs231n.github.io/assignments2019/assignment1/)
 - [SGD及其变种](http://cs231n.github.io/neural-networks-3/#sgd)
-- [Batch-normalization论文](https://arxiv.org/abs/1502.03167)
+- [Batch-normalization论文](https://arxiv.org/abs/1502.03167.pdf)
+- [Layer-normalization论文](https://arxiv.org/pdf/1607.06450.pdf)
