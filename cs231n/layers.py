@@ -564,7 +564,7 @@ def conv_forward_naive(x, w, b, conv_param):
 
     # method 2
     # we can also reshape the input and weight matrix and convert the computation in a FC layer way.
-    x_col = img2col(x_padded, w, S)
+    x_col = img2col(x_padded, HH, WW, S)
     w_col = w2col(w)
 
     y = np.dot(x_col, w_col)
@@ -612,29 +612,35 @@ def conv_backward_naive(dout, cache):
     db = np.sum(dout, axis=(0, 2, 3))
 
     # method 1
-    # for i in range(H_out):
-    #     for j in range(W_out):
-    #         x_pad_masked = x_pad[:, :, i * S:i * S + HH, j * S:j * S + WW]
-    #         for k in range(F):  # compute dw
-    #             dw[k, :, :, :] += np.sum(x_pad_masked * (dout[:, k, i, j])[:, None, None, None], axis=0)
-    #         for n in range(N):  # compute dx_pad
-    #             dx_pad[n, :, i * S:i * S + HH, j * S:j * S + WW] += np.sum((w[:, :, :, :] *
-    #                                                                         (dout[n, :, i, j])[:, None, None, None]),
-    #                                                                        axis=0)
-    # dx = dx_pad[:, :, P:-P, P:-P]
+    for i in range(H_out):
+        for j in range(W_out):
+            x_pad_masked = x_pad[:, :, i * S:i * S + HH, j * S:j * S + WW]
+            for k in range(F):  # compute dw
+                dw[k, :, :, :] += np.sum(x_pad_masked * (dout[:, k, i, j])[:, None, None, None], axis=0)
+            for n in range(N):  # compute dx_pad
+                dx_pad[n, :, i * S:i * S + HH, j * S:j * S + WW] += np.sum((w[:, :, :, :] *
+                                                                            (dout[n, :, i, j])[:, None, None, None]),
+                                                                           axis=0)
+    dx = dx_pad[:, :, P:-P, P:-P]
 
     # method 2
-    x_col = img2col(x, w, S)
-    dw_col = np.zeros_like(w2col(w))  # shape(HH*WW*C, F)
-    dy = np.zeros((N, H_out * W_out, F))
-    for i in range(F):
-        dy[:, :, i] = dout[:, i, :, :].reshape(N, H_out * W_out)
+    # x_pad_col = img2col(x_pad, HH, WW, S)
+    # dy = np.zeros((N, x_pad_col.shape[1], F))
+    # # get dy
+    # for i in range(F):
+    #     dy[:, :, i] = dout[:, i, :, :].reshape(N, x_pad_col.shape[1])
+    #
+    # # get dw_col & dw
+    # dw_col = np.zeros((x_pad_col.shape[2], F))
+    # for n in range(N):
+    #     dw_col += np.dot(x_pad_col[n].T, dy[n])
+    # for i in range(F):
+    #     dw[i, :, :, :] = dw_col[:, i].reshape(C, HH, WW)
 
-    dw_col = np.dot(x_col.T, dy)
-    for i in range(F):
-        dw[i, :, :, :] = dw_col[:, :, i].reshape(C, HH, WW)
+    # if we wanna compute dx_col and revert it to dx, it's too complex so we have to find a new way
+    # https://zhuanlan.zhihu.com/p/40951745, the code is explained in this article
+
     pass
-
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
     #                             END OF YOUR CODE                            #
@@ -642,18 +648,19 @@ def conv_backward_naive(dout, cache):
     return dx, dw, db
 
 
-def img2col(x, w, stride):
+def img2col(x, k_height, k_width, stride):
     """
     a method used in reshaping the image matrix, which can pull the number in convolution window into columns
     Inputs:
+    :param k_width: the filter's width
+    :param k_height: the filter's height
     :param x: input matrix with shape(N, C, H, W)
-    :param w: weight matrix with shape(F, C, HH, WW)
     :param stride: the stride of filters
 
     :return: the reshaped x with shape(N, H1*W1 , HH*WW*C)
     """
     N, C, H, W = x.shape
-    F, _, HH, WW = w.shape
+    HH, WW = k_height, k_width
     H1 = int((H - HH) / stride + 1)
     W1 = int((W - WW) / stride + 1)
     H_out = H1 * W1
