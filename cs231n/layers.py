@@ -543,9 +543,36 @@ def conv_forward_naive(x, w, b, conv_param):
     # Hint: you can use the function np.pad for padding.                      #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    N, C, H, W = x.shape
+    F, C, HH, WW = w.shape
+    S, P = conv_param['stride'], conv_param['pad']
+    H_out = int((H + 2 * P - HH) / S + 1)
+    W_out = int((W + 2 * P - WW) / S + 1)
+    out = np.zeros((N, F, H_out, W_out))
+    # http://stackoverflow.com/questions/19349410/how-to-pad-with-zeros-a-tensor-along-some-axis-python
+    x_padded = np.pad(x, ((0,), (0,), (P,), (P,)), 'constant')  # pad alongside four dimensions
 
+    # method 1
+    # the object way as the processing in video
+    # for i in range(H_out):
+    #     for j in range(W_out):
+    #         x_padded_area = x_padded[:, :, i * S:i * S + HH, j * S:j * S + WW]
+    #         for k in range(F):
+    #             out[:, k, i, j] = np.sum(x_padded_area * w[k, :, :, :], axis=(1, 2, 3))
+    # b = b[None, :, None, None]
+    # out += b
+
+    # method 2
+    # we can also reshape the input and weight matrix and convert the computation in a FC layer way.
+    x_col = img2col(x_padded, w, S)
+    w_col = w2col(w)
+
+    y = np.dot(x_col, w_col)
+    y += b[None, None, :]
+
+    for j in range(F):
+        out[:, j, :, :] = y[:, :, j].reshape(N, H_out, W_out)
     pass
-
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
     #                             END OF YOUR CODE                            #
@@ -572,7 +599,40 @@ def conv_backward_naive(dout, cache):
     # TODO: Implement the convolutional backward pass.                        #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    x, w, b, conv_param = cache
+    N, C, H, W = x.shape
+    F, C, HH, WW = w.shape
+    S, P = conv_param['stride'], conv_param['pad']
+    H_out = int(1 + (H + 2 * P - HH) / S)
+    W_out = int(1 + (W + 2 * P - WW) / S)
 
+    x_pad = np.pad(x, ((0,), (0,), (P,), (P,)), mode='constant', constant_values=0)
+    dx_pad = np.zeros_like(x_pad)
+    dw = np.zeros_like(w)
+    db = np.sum(dout, axis=(0, 2, 3))
+
+    # method 1
+    # for i in range(H_out):
+    #     for j in range(W_out):
+    #         x_pad_masked = x_pad[:, :, i * S:i * S + HH, j * S:j * S + WW]
+    #         for k in range(F):  # compute dw
+    #             dw[k, :, :, :] += np.sum(x_pad_masked * (dout[:, k, i, j])[:, None, None, None], axis=0)
+    #         for n in range(N):  # compute dx_pad
+    #             dx_pad[n, :, i * S:i * S + HH, j * S:j * S + WW] += np.sum((w[:, :, :, :] *
+    #                                                                         (dout[n, :, i, j])[:, None, None, None]),
+    #                                                                        axis=0)
+    # dx = dx_pad[:, :, P:-P, P:-P]
+
+    # method 2
+    x_col = img2col(x, w, S)
+    dw_col = np.zeros_like(w2col(w))  # shape(HH*WW*C, F)
+    dy = np.zeros((N, H_out * W_out, F))
+    for i in range(F):
+        dy[:, :, i] = dout[:, i, :, :].reshape(N, H_out * W_out)
+
+    dw_col = np.dot(x_col.T, dy)
+    for i in range(F):
+        dw[i, :, :, :] = dw_col[:, :, i].reshape(C, HH, WW)
     pass
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -580,6 +640,44 @@ def conv_backward_naive(dout, cache):
     #                             END OF YOUR CODE                            #
     ###########################################################################
     return dx, dw, db
+
+
+def img2col(x, w, stride):
+    """
+    a method used in reshaping the image matrix, which can pull the number in convolution window into columns
+    Inputs:
+    :param x: input matrix with shape(N, C, H, W)
+    :param w: weight matrix with shape(F, C, HH, WW)
+    :param stride: the stride of filters
+
+    :return: the reshaped x with shape(N, H1*W1 , HH*WW*C)
+    """
+    N, C, H, W = x.shape
+    F, _, HH, WW = w.shape
+    H1 = int((H - HH) / stride + 1)
+    W1 = int((W - WW) / stride + 1)
+    H_out = H1 * W1
+    W_out = int(HH * WW * C)
+    out = np.zeros((N, H_out, W_out))
+    # reshape
+    for n in range(N):
+        k = 0
+        for i in range(H1):
+            for j in range(W1):
+                conv_area = x[n, :, i * stride:i * stride + HH, j * stride:j * stride + WW].reshape([-1])
+                out[n, k, :] = conv_area
+                k += 1
+    return out
+
+
+def w2col(w):
+    F, C, HH, WW = w.shape
+    w_col = w.reshape(-1, F)
+    w_col = np.zeros_like(w_col)
+
+    for i in range(F):
+        w_col[:, i] = w[i, :, :, :].reshape(-1)
+    return w_col
 
 
 def max_pool_forward_naive(x, pool_param):
@@ -606,9 +704,16 @@ def max_pool_forward_naive(x, pool_param):
     # TODO: Implement the max-pooling forward pass                            #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    N, C, H, W = x.shape
+    ph, pw, S = pool_param['pool_height'], pool_param['pool_width'], pool_param['stride']
+    H_out = int((H - ph) / S + 1)
+    W_out = int((W - pw) / S + 1)
+    out = np.zeros((N, C, H_out, W_out))
 
+    for i in range(H_out):
+        for j in range(W_out):
+            out[:, :, i, j] = np.max(x[:, :, i * S:i * S + ph, j * S:j * S + pw], axis=(2, 3))
     pass
-
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
     #                             END OF YOUR CODE                            #
@@ -633,7 +738,20 @@ def max_pool_backward_naive(dout, cache):
     # TODO: Implement the max-pooling backward pass                           #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    x, pool_param = cache
+    N, C, H, W = x.shape
+    ph, pw, S = pool_param['pool_height'], pool_param['pool_width'], pool_param['stride']
+    H_out = int((H - ph) / S + 1)
+    W_out = int((W - pw) / S + 1)
+    dx = np.zeros_like(x)
 
+    for i in range(H_out):
+        for j in range(W_out):
+            x_mask = x[:, :, i * S:i * S + ph, j * S:j * S + pw]
+            dx_mask = dx[:, :, i * S:i * S + ph, j * S:j * S + pw]
+            flags = np.max(x_mask, axis=(2, 3), keepdims=True) == x_mask
+            # only the mask value in conv-area is True
+            dx_mask += flags * (dout[:, :, i, j])[:, :, None, None]
     pass
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
