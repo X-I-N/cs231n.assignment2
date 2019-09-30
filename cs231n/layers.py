@@ -202,8 +202,8 @@ def batchnorm_forward(x, gamma, beta, bn_param):
         sample_var = np.var(x, axis=0)
         x_hat = (x - sample_mean) / np.sqrt(sample_var + eps)
         out = gamma * x_hat + beta
-        cache = (x, gamma, beta, x_hat, sample_mean, sample_var, eps)
 
+        cache = (x, gamma, beta, x_hat, sample_mean, sample_var, eps)
         running_mean = momentum * running_mean + (1 - momentum) * sample_mean
         running_var = momentum * running_var + (1 - momentum) * sample_var
         pass
@@ -679,11 +679,7 @@ def img2col(x, k_height, k_width, stride):
 
 def w2col(w):
     F, C, HH, WW = w.shape
-    w_col = w.reshape(-1, F)
-    w_col = np.zeros_like(w_col)
-
-    for i in range(F):
-        w_col[:, i] = w[i, :, :, :].reshape(-1)
+    w_col = w.transpose(1, 2, 3, 0).reshape(-1, F)
     return w_col
 
 
@@ -800,9 +796,11 @@ def spatial_batchnorm_forward(x, gamma, beta, bn_param):
     # Your implementation should be very short; ours is less than five lines. #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
+    N, C, H, W = x.shape
+    x = x.transpose(0, 2, 3, 1).reshape(N * H * W, C)
+    out, cache = batchnorm_forward(x, gamma, beta, bn_param)
+    out = out.reshape(N, H, W, C).transpose(0, 3, 1, 2)
     pass
-
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
     #                             END OF YOUR CODE                            #
@@ -834,7 +832,10 @@ def spatial_batchnorm_backward(dout, cache):
     # Your implementation should be very short; ours is less than five lines. #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
+    N, C, H, W = dout.shape
+    dout = dout.transpose(0, 2, 3, 1).reshape(N * H * W, C)
+    dx, dgamma, dbeta = batchnorm_backward_alt(dout, cache)
+    dx = dx.reshape(N, H, W, C).transpose(0, 3, 1, 2)
     pass
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
